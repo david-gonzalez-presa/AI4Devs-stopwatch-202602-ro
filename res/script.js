@@ -1,4 +1,3 @@
-
 /**
  * ============================================================================
  * STOPWATCH APPLICATION — script.js
@@ -342,6 +341,12 @@ class StopwatchApp {
 
     /**
      * Inicializa todos los componentes y bindea los eventos.
+     *
+     * Fail-fast: si algún componente falla al inicializarse (e.g., elemento
+     * DOM no encontrado), el error se loguea y se relanza para evitar que
+     * la instancia quede en un estado parcialmente roto e inutilizable.
+     *
+     * @throws {Error} Si cualquier componente o elemento DOM requerido falta.
      */
     constructor() {
         try {
@@ -363,6 +368,7 @@ class StopwatchApp {
             this.#display.update(0);
         } catch (err) {
             console.error("[StopwatchApp] Error de inicialización:", err);
+            throw err; // Fail-fast: no dejar instancia en estado parcial
         }
     }
 
