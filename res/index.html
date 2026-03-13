@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stopwatch</title>
+
+    <!--
+    ============================================================================
+    STOPWATCH APPLICATION — index.html
+    ============================================================================
+
+    DESCRIPCIÓN:
+        Cronómetro digital con interfaz gráfica que muestra horas, minutos,
+        segundos y milisegundos. Incluye controles de inicio, pausa,
+        reanudación y reinicio.
+
+    ARQUITECTURA:
+        - index.html  → Estructura y estilos (este fichero)
+        - script.js   → Toda la lógica de negocio (fichero separado)
+
+        Se sigue el principio de Separación de Responsabilidades (SoC):
+        HTML/CSS solo define la presentación; JS solo define el comportamiento.
+
+    PRINCIPIOS SOLID APLICADOS:
+        - SRP: Cada clase/módulo tiene una única responsabilidad.
+          · StopwatchTimer   → gestiona el tiempo.
+          · StopwatchDisplay → actualiza la UI del reloj.
+          · ButtonController → gestiona estados y apariencia de los botones.
+          · StopwatchApp     → orquesta los componentes anteriores.
+        - OCP: Se pueden añadir nuevos estados de botón sin modificar
+          la lógica existente del temporizador.
+        - LSP: Todos los componentes respetan sus contratos.
+        - ISP: Los componentes exponen solo los métodos que necesitan.
+        - DIP: StopwatchApp depende de abstracciones (interfaces implícitas),
+          no de implementaciones concretas.
+
+    ESTADOS DEL CRONÓMETRO:
+        1. IDLE     → Display "00:00:00 000", botón verde "Start".
+        2. RUNNING  → Contador activo, botón verde "Pause".
+        3. PAUSED   → Contador detenido, botón azul "Continue".
+        4. (Clear)  → Desde cualquier estado vuelve a IDLE.
+
+    EDGE CASES CONSIDERADOS:
+        - Doble clic rápido en botones.
+        - Desbordamiento de horas (max 99:59:59).
+        - Pérdida de foco de la pestaña (usa timestamps absolutos).
+        - Errores de DOM (elementos no encontrados).
+
+    AUTOR: Frontend Senior Developer
+    FECHA: 2026-03-13
+    ============================================================================
+    -->
+
+    <style>
+        /* ===== RESET & BASE ===== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-page: #e8e8e8;
+            --bg-display: #dde0ef;
+            --border-color: #555;
+            --border-width: 3px;
+            --radius-lg: 18px;
+            --radius-md: 14px;
+            --color-start: #00e000;
+            --color-pause: #00e000;
+            --color-continue: #3b82f6;
+            --color-clear: #ff0000;
+            --font-digital: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: var(--bg-page);
+            font-family: var(--font-digital);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== CONTENEDOR PRINCIPAL ===== */
+        .stopwatch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            padding: 40px;
+        }
+
+        /* ===== DISPLAY DEL TIEMPO ===== */
+        .display-container {
+            background: var(--bg-display);
+            border: var(--border-width) solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px 48px;
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            min-width: 520px;
+            position: relative;
+            box-shadow:
+                inset 0 2px 8px rgba(255,255,255,0.6),
+                0 3px 6px rgba(0,0,0,0.15);
+        }
+
+        .time-main {
+            font-size: 96px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: #111;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .time-ms-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-end;
+            margin-left: 2px;
+            align-self: flex-end;
+            padding-bottom: 4px;
+        }
+
+        .time-ms {
+            font-size: 28px;
+            font-weight: 600;
+            color: #333;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ===== BOTONES ===== */
+        .buttons-row {
+            display: flex;
+            gap: 32px;
+        }
+
+        .btn {
+            min-width: 220px;
+            padding: 18px 40px;
+            font-size: 36px;
+            font-weight: 700;
+            font-family: var(--font-digital);
+            color: #111;
+            border: var(--border-width) solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            user-select: none;
+            transition: filter 0.1s ease, transform 0.08s ease;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+            filter: brightness(0.9);
+        }
+
+        .btn:focus-visible {
+            outline: 3px solid #111;
+            outline-offset: 3px;
+        }
+
+        /* Estados del botón de acción */
+        .btn-start {
+            background: var(--color-start);
+        }
+
+        .btn-pause {
+            background: var(--color-pause);
+        }
+
+        .btn-continue {
+            background: var(--color-continue);
+            color: #fff;
+        }
+
+        .btn-clear {
+            background: var(--color-clear);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 640px) {
+            .display-container {
+                min-width: auto;
+                padding: 16px 24px;
+            }
+            .time-main {
+                font-size: 56px;
+            }
+            .time-ms {
+                font-size: 18px;
+            }
+            .btn {
+                min-width: 140px;
+                padding: 14px 24px;
+                font-size: 24px;
+            }
+            .buttons-row {
+                gap: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Estructura principal del cronómetro -->
+    <div class="stopwatch">
+
+        <!-- Panel del display de tiempo -->
+        <div class="display-container">
+            <span id="time-main" class="time-main">00:00:00</span>
+            <div class="time-ms-wrapper">
+                <span id="time-ms" class="time-ms">000</span>
+            </div>
+        </div>
+
+        <!-- Fila de botones de control -->
+        <div class="buttons-row">
+            <button id="btn-action" class="btn btn-start" type="button">Start</button>
+            <button id="btn-clear" class="btn btn-clear" type="button">Clear</button>
+        </div>
+
+    </div>
+
+    <!-- Lógica de negocio en fichero separado (SOLID: SRP) -->
+    <script src="script.js"></script>
+</body>
+</html>
